@@ -55,6 +55,18 @@ export interface PlayerFilter {
   minLevel?: ProgressLevel;
 }
 
+// ── Contact Details ───────────────────────────────────────────────────────────
+/**
+ * Contact information returned after pay-to-contact is unlocked for a player.
+ * At least one field must be present. Validation of the requirement is enforced
+ * at the contract level to ensure data integrity.
+ */
+export interface ContactDetails {
+  email?: string;
+  phone?: string;
+  telegram?: string;
+}
+
 // ── Contract call helpers ─────────────────────────────────────────────────────
 export interface ContractCallResult<T = unknown> {
   success: boolean;
