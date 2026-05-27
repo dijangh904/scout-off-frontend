@@ -54,6 +54,48 @@ export async function checkIsValidator(address: string) {
   return simulateTx("is_validator", [nativeToScVal(address, { type: "address" })]);
 }
 
+export async function getMilestoneHistory(playerId: string) {
+  return simulateTx("get_milestone_history", [nativeToScVal(playerId, { type: "string" })]);
+}
+
+export async function getContractHealth() {
+  return simulateTx("health", []);
+}
+
+/**
+ * Build a signed `register_player` transaction via Freighter and submit it.
+ *
+ * @param wallet - The player's Stellar public key (source + auth).
+ * @param vitals - Player vitals: name, age, position, region, nationality.
+ * @param ipfsHash - IPFS CID of the player's initial highlight reel.
+ * @returns The new player ID string assigned by the contract.
+ * @throws {ContractError} AlreadyInitialized (1) if the player is already registered.
+ * @throws {ContractError} NotInitialized (2) if the contract has not been set up.
+ */
+export async function registerPlayer(
+  wallet: string,
+  vitals: PlayerVitals,
+  ipfsHash: string
+): Promise<string> {
+  const { signTransaction } = await import("@stellar/freighter-api");
+  const xdrTx = await buildTx(
+    "register_player",
+    [
+      nativeToScVal(wallet, { type: "address" }),
+      nativeToScVal(vitals),
+      nativeToScVal(ipfsHash, { type: "string" }),
+    ],
+    wallet
+  );
+  const signedTxXdr = await signTransaction(xdrTx, { networkPassphrase: NETWORK });
+  const { Transaction } = await import("@stellar/stellar-sdk");
+  const result = await rpc.sendTransaction(new Transaction(signedTxXdr, NETWORK));
+  if (result.status === "ERROR") throw new Error(`ContractError: ${JSON.stringify(result)}`);
+  const getResult = await rpc.getTransaction(result.hash);
+  if ("returnValue" in getResult) return scValToNative(getResult.returnValue!) as string;
+  throw new Error(`ContractError: transaction did not return a value`);
+}
+
 // ── Scout ─────────────────────────────────────────────────────────────────────
 export async function buildPayToContact(scoutKey: string, playerId: string) {
   return buildTx("pay_to_contact", [
