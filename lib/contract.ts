@@ -1,6 +1,6 @@
 import { Contract, nativeToScVal, scValToNative, xdr, TransactionBuilder as TB, Account } from "@stellar/stellar-sdk";
 import { rpc, NETWORK, BASE_FEE } from "./stellar";
-import type { PlayerVitals } from "@/types";
+import type { PlayerVitals, ValidatorInfo, ContactDetails } from "@/types";
 
 const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID!;
 const contract = new Contract(CONTRACT_ID);
@@ -141,6 +141,31 @@ export async function buildPayToContact(scoutKey: string, playerId: string) {
   ], scoutKey);
 }
 
+/**
+ * Execute a pay-to-contact transaction via Freighter and retrieve contact details.
+ *
+ * @param scoutKey - The scout's Stellar public key (source + auth).
+ * @param playerId - The player ID to unlock contact details for.
+ * @returns The ContactDetails (email, phone, telegram) for the player.
+ * @throws {ContractError} SubscriptionExpired (11) if the scout's subscription is not active.
+ * @throws {ContractError} InsufficientFee (3) if the subscription tier does not cover this action.
+ * @throws {ContractError} NotInitialized (2) if the contract is not set up.
+ */
+export async function payToContact(scoutKey: string, playerId: string): Promise<ContactDetails> {
+  const { signTransaction } = await import("@stellar/freighter-api");
+  const xdrTx = await buildTx("pay_to_contact", [
+    nativeToScVal(scoutKey, { type: "address" }),
+    nativeToScVal(playerId, { type: "string" }),
+  ], scoutKey);
+  const signedTxXdr = await signTransaction(xdrTx, { networkPassphrase: NETWORK });
+  const { Transaction } = await import("@stellar/stellar-sdk");
+  const result = await rpc.sendTransaction(new Transaction(signedTxXdr, NETWORK));
+  if (result.status === "ERROR") throw new Error(`ContractError: ${JSON.stringify(result)}`);
+  const getResult = await rpc.getTransaction(result.hash);
+  if ("returnValue" in getResult) return scValToNative(getResult.returnValue!) as ContactDetails;
+  throw new Error(`ContractError: transaction did not return contact details`);
+}
+
 export async function filterPlayers(region: string, position: string, minLevel: number) {
   return simulateTx("filter_players", [
     nativeToScVal(region, { type: "string" }),
@@ -149,8 +174,43 @@ export async function filterPlayers(region: string, position: string, minLevel: 
   ]);
 }
 
-export async function getValidators(): Promise<string[]> {
+/**
+ * Retrieve all validators currently authorized in the contract.
+ *
+ * @returns An array of ValidatorInfo objects containing validator address and join timestamp.
+ */
+export async function getValidators(): Promise<ValidatorInfo[]> {
   return simulateTx("get_validators", []);
+}
+
+/**
+ * Build a transaction to add a new validator to the contract.
+ * Only callable by the contract admin wallet.
+ *
+ * @param adminKey - The admin wallet's Stellar public key.
+ * @param address - The Stellar public key of the validator to add.
+ * @returns The prepared transaction XDR for signing.
+ * @throws {ContractError} Unauthorized (10) if called by a non-admin wallet.
+ */
+export async function buildAddValidator(adminKey: string, address: string) {
+  return buildTx("add_validator", [
+    nativeToScVal(address, { type: "address" }),
+  ], adminKey);
+}
+
+/**
+ * Build a transaction to remove a validator from the contract.
+ * Only callable by the contract admin wallet.
+ *
+ * @param adminKey - The admin wallet's Stellar public key.
+ * @param address - The Stellar public key of the validator to remove.
+ * @returns The prepared transaction XDR for signing.
+ * @throws {ContractError} Unauthorized (10) if called by a non-admin wallet.
+ */
+export async function buildRemoveValidator(adminKey: string, address: string) {
+  return buildTx("remove_validator", [
+    nativeToScVal(address, { type: "address" }),
+  ], adminKey);
 }
 
 export async function buildRevokeMilestone(validatorKey: string, playerId: string, milestoneId: string) {

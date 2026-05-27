@@ -35,6 +35,12 @@ export interface Player {
   createdAt: number;
 }
 
+// ── Validator ────────────────────────────────────────────────────────────────────
+export interface ValidatorInfo {
+  address: string;        // Stellar public key of the validator
+  joinedAt: number;       // Unix timestamp when added to the validators list
+}
+
 // ── Scout ─────────────────────────────────────────────────────────────────────
 export type SubscriptionTier = "basic" | "pro" | "elite";
 
