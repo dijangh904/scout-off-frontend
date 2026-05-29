@@ -134,6 +134,25 @@ export async function updateProfile(wallet: string, playerId: string, ipfsHash: 
 }
 
 // ── Scout ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Contract error codes for scout payment flows.
+ *
+ * | Code | Name                | Description                                              |
+ * |------|---------------------|----------------------------------------------------------|
+ * |  7   | InsufficientFee     | The XLM fee sent is below the required amount for the    |
+ * |      |                     | requested subscription tier or pay-to-contact action.    |
+ * |  8   | SubscriptionExpired | The scout's active subscription has passed its expiry    |
+ * |      |                     | timestamp and must be renewed before further access.     |
+ * |  9   | ContractPaused      | The contract has been administratively paused; all write |
+ * |      |                     | operations are blocked until it is unpaused.             |
+ */
+export const SCOUT_ERROR_CODES = {
+  InsufficientFee: 7,
+  SubscriptionExpired: 8,
+  ContractPaused: 9,
+} as const;
+
 export async function buildPayToContact(scoutKey: string, playerId: string) {
   return buildTx("pay_to_contact", [
     nativeToScVal(scoutKey, { type: "address" }),
@@ -142,28 +161,87 @@ export async function buildPayToContact(scoutKey: string, playerId: string) {
 }
 
 /**
- * Execute a pay-to-contact transaction via Freighter and retrieve contact details.
+ * Subscribe a scout to a tier by signing and submitting the transaction via Freighter.
  *
- * @param scoutKey - The scout's Stellar public key (source + auth).
- * @param playerId - The player ID to unlock contact details for.
- * @returns The ContactDetails (email, phone, telegram) for the player.
- * @throws {ContractError} SubscriptionExpired (11) if the scout's subscription is not active.
- * @throws {ContractError} InsufficientFee (3) if the subscription tier does not cover this action.
- * @throws {ContractError} NotInitialized (2) if the contract is not set up.
+ * The function handles XLM fee approval by preparing the transaction through the RPC
+ * node (which attaches the required fee footprint) before presenting it to Freighter
+ * for signing. The signed transaction is then submitted to the network.
+ *
+ * @param scout - The scout's Stellar public key (source account + auth signer).
+ * @param tier  - The subscription tier to purchase: `"basic"`, `"pro"`, or `"elite"`.
+ * @returns A Promise that resolves when the subscription transaction is confirmed.
+ *
+ * @throws {ContractError} InsufficientFee (7)     — The XLM amount attached is below the
+ *                                                    required fee for the chosen tier.
+ * @throws {ContractError} SubscriptionExpired (8) — An existing subscription has expired;
+ *                                                    the contract requires a fresh purchase.
+ * @throws {ContractError} ContractPaused (9)      — All write operations are blocked while
+ *                                                    the contract is administratively paused.
  */
-export async function payToContact(scoutKey: string, playerId: string): Promise<ContactDetails> {
+export async function subscribe(scout: string, tier: SubscriptionTier): Promise<void> {
   const { signTransaction } = await import("@stellar/freighter-api");
-  const xdrTx = await buildTx("pay_to_contact", [
-    nativeToScVal(scoutKey, { type: "address" }),
-    nativeToScVal(playerId, { type: "string" }),
-  ], scoutKey);
+  // buildTx calls rpc.prepareTransaction which attaches the XLM fee footprint
+  const xdrTx = await buildTx(
+    "subscribe",
+    [
+      nativeToScVal(scout, { type: "address" }),
+      nativeToScVal(tier, { type: "string" }),
+    ],
+    scout
+  );
   const signedTxXdr = await signTransaction(xdrTx, { networkPassphrase: NETWORK });
   const { Transaction } = await import("@stellar/stellar-sdk");
   const result = await rpc.sendTransaction(new Transaction(signedTxXdr, NETWORK));
-  if (result.status === "ERROR") throw new Error(`ContractError: ${JSON.stringify(result)}`);
+  if (result.status === "ERROR") {
+    throw new Error(`ContractError: ${JSON.stringify(result)}`);
+  }
+  // Wait for confirmation
   const getResult = await rpc.getTransaction(result.hash);
-  if ("returnValue" in getResult) return scValToNative(getResult.returnValue!) as ContactDetails;
-  throw new Error(`ContractError: transaction did not return contact details`);
+  if ("status" in getResult && getResult.status === "FAILED") {
+    throw new Error(`ContractError: subscribe transaction failed`);
+  }
+}
+
+/**
+ * Pay to unlock a player's contact details, signing and submitting via Freighter.
+ *
+ * The function handles XLM fee approval by preparing the transaction through the RPC
+ * node before presenting it to Freighter for signing. On success the contract returns
+ * the player's `ContactDetails` object.
+ *
+ * @param scout    - The scout's Stellar public key (source account + auth signer).
+ * @param playerID - The unique player ID whose contact details should be unlocked.
+ * @returns A Promise resolving to the player's {@link ContactDetails} (email, phone, telegram).
+ *
+ * @throws {ContractError} InsufficientFee (7)     — The XLM fee attached is below the
+ *                                                    required amount for this action.
+ * @throws {ContractError} SubscriptionExpired (8) — The scout's subscription has expired
+ *                                                    and must be renewed before contacting players.
+ * @throws {ContractError} ContractPaused (9)      — All write operations are blocked while
+ *                                                    the contract is administratively paused.
+ */
+export async function payToContact(scout: string, playerID: string): Promise<ContactDetails> {
+  const { signTransaction } = await import("@stellar/freighter-api");
+  // buildTx calls rpc.prepareTransaction which attaches the XLM fee footprint
+  const xdrTx = await buildTx(
+    "pay_to_contact",
+    [
+      nativeToScVal(scout, { type: "address" }),
+      nativeToScVal(playerID, { type: "string" }),
+    ],
+    scout
+  );
+  const signedTxXdr = await signTransaction(xdrTx, { networkPassphrase: NETWORK });
+  const { Transaction } = await import("@stellar/stellar-sdk");
+  const result = await rpc.sendTransaction(new Transaction(signedTxXdr, NETWORK));
+  if (result.status === "ERROR") {
+    throw new Error(`ContractError: ${JSON.stringify(result)}`);
+  }
+  const getResult = await rpc.getTransaction(result.hash);
+  if ("returnValue" in getResult) {
+    return scValToNative(getResult.returnValue!) as ContactDetails;
+  }
+  throw new Error(`ContractError: payToContact did not return contact details`);
 }
 
 export async function filterPlayers(region: string, position: string, minLevel: number) {
@@ -224,6 +302,7 @@ export async function getSubscription(scout: string) {
   return simulateTx("get_subscription", [nativeToScVal(scout, { type: "address" })]);
 }
 
+/** @deprecated Use {@link subscribe} for the full signed write flow. */
 export async function buildSubscribe(scoutKey: string, tier: string) {
   return buildTx("subscribe", [
     nativeToScVal(scoutKey, { type: "address" }),
