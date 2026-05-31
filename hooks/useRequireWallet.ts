@@ -1,8 +1,7 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useWallet } from "./useWallet";
-import { useToast } from "@/components/ui/Toast";
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useWallet } from './useWallet';
 
 export function useRequireWallet() {
   const { publicKey, isAuthenticated, isConnecting } = useWallet();
@@ -11,11 +10,8 @@ export function useRequireWallet() {
 
   useEffect(() => {
     if (!isConnecting && (!publicKey || !isAuthenticated)) {
-      router.replace("/");
-      show({
-        message: "Please connect your wallet",
-        variant: "info",
-      });
+      router.replace('/');
+      // You could trigger a toast here if a Toast system is available
     }
   }, [publicKey, isAuthenticated, isConnecting, router, show]);
 
