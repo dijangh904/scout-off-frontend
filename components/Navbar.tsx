@@ -1,9 +1,7 @@
-"use client";
-import { useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import WalletButton from "./WalletButton";
-import { useContractHealth } from "@/hooks/useContractHealth";
+'use client';
+import Link from 'next/link';
+import WalletButton from './WalletButton';
+import { useContractHealth } from '@/hooks/useContractHealth';
 
 const NAV_LINKS = [
   { href: "/scout", label: "Scout Dashboard" },
@@ -18,11 +16,9 @@ export default function Navbar() {
   return (
     <>
       {paused && (
-        <div
-          role="alert"
-          className="bg-yellow-500 text-black text-center text-sm font-medium py-2 px-4"
-        >
-          ⚠️ ScoutOff is currently under maintenance. Write actions are temporarily disabled.
+        <div className="bg-yellow-500 text-black text-center text-sm font-medium py-2 px-4">
+          ⚠️ ScoutOff is currently under maintenance. Write actions are
+          temporarily disabled.
         </div>
       )}
       <nav
@@ -30,27 +26,19 @@ export default function Navbar() {
         className="border-b border-gray-800 bg-brand-dark"
       >
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          {/* Logo */}
           <Link
             href="/"
-            aria-current={pathname === "/" ? "page" : undefined}
             className="text-brand-green font-bold text-xl tracking-tight"
           >
             ScoutOff
           </Link>
-
-          {/* Desktop nav links */}
-          <div className="hidden sm:flex items-center gap-6 text-sm text-gray-300">
-            {NAV_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                aria-current={pathname === href ? "page" : undefined}
-                className="hover:text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-green rounded"
-              >
-                {label}
-              </Link>
-            ))}
+          <div className="flex items-center gap-6 text-sm text-gray-300">
+            <Link href="/scout" className="hover:text-white transition">
+              Scout Dashboard
+            </Link>
+            <Link href="/player" className="hover:text-white transition">
+              Player Dashboard
+            </Link>
             <WalletButton />
           </div>
 
