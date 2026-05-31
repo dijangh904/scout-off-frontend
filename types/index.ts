@@ -72,6 +72,9 @@ export interface Scout {
 }
 
 // ── Subscription ──────────────────────────────────────────────────────────────
+/**
+ * Represents a scout's subscription details.
+ */
 export interface Subscription {
   scout: string; // Stellar address
   tier: SubscriptionTier;
