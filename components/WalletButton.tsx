@@ -1,6 +1,5 @@
-"use client";
-import { useWallet } from "@/hooks/useWallet";
-import Spinner from "@/components/ui/Spinner";
+'use client';
+import { useWallet } from '@/hooks/useWallet';
 
 export default function WalletButton() {
   const { publicKey, connect, disconnect, isConnecting, xlmBalance, isLoadingBalance } =
@@ -32,7 +31,7 @@ export default function WalletButton() {
       disabled={isConnecting}
       className="text-sm bg-brand-green text-black font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition disabled:opacity-50"
     >
-      {isConnecting ? "Connecting…" : "Connect Wallet"}
+      {isConnecting ? 'Connecting…' : 'Connect Wallet'}
     </button>
   );
 }
